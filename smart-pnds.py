@@ -1,16 +1,17 @@
-#!/etc/powerdns/pdns-pyenv/bin/python2 -u
+#!/usr/bin/python2 -u
 ## -*- coding: utf-8 -*-
 import sys
 import syslog
 from collections import defaultdict
 from pyip import IPInfo
-from os.path import dirname,join,exists
-if exists(join(dirname(__file__), "pdns-remotebackend-python/src")):
-    sys.path.insert(0, join(dirname(__file__), "pdns-remotebackend-python/src"))
+from os.path import realpath,dirname,join,exists
 
+py_pdns = join(dirname(realpath(__file__)), "pdns-remotebackend-python/src")
+if exists(py_pdns):
+    sys.path.insert(0, py_pdns)
 import pdns.remotebackend, pdns.remotebackend.unix
 
-QQWry_DB = join(dirname(__file__), 'qqwry.dat')
+QQWry_DB = join(dirname(realpath(__file__)), 'qqwry.dat')
 QQWry = IPInfo(QQWry_DB)
 
 DOMAIN = \
