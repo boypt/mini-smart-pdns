@@ -25,7 +25,8 @@ class StaticDomain(object):
     def add_record(self, qtype, content, ttl=300, auth=1):
         self.records[qtype].append({'qtype': qtype, 'qname': self.qname, 'content': content, 'ttl': ttl, 'auth': auth})
 
-    def query(self, qtype, query_args = None):
+    def query(self, query_args):
+        qtype = query_args['qtype']
         if qtype == 'ANY':
             return list(itertools.chain.from_iterable(self.records.values()))
         else:
@@ -43,12 +44,13 @@ class DynamicDomain(StaticDomain):
             raise Exception('dyn_content need to be callable')
         self.dyn_methods[qtype] = dyn_content
 
-    def query(self, qtype, query_args):
+    def query(self, query_args):
+        qtype = query_args['qtype']
         for qtype, dyn_content in self.dyn_methods.items():
             self.records[qtype] = \
                     [{'qtype': qtype, 'qname': self.qname, 
                         'content': value, 'ttl':0, 'auth':1} for value in dyn_content(query_args)]
-        return super(DynamicDomain, self).query(qtype, query_args)
+        return super(DynamicDomain, self).query(query_args)
 
 class ISPSmartDomain(StaticDomain):
 
@@ -68,7 +70,8 @@ class ISPSmartDomain(StaticDomain):
         else:
             self.isp_a_record[isp].append({'qtype': 'A', 'qname': self.qname, 'content': ip, 'ttl': 0, 'auth': 1})
 
-    def query(self, qtype, query_args):
+    def query(self, query_args):
+        qtype = query_args['qtype']
 
         if qtype in ('ANY', 'A'):
             remote = query_args['remote']
@@ -91,7 +94,7 @@ class ISPSmartDomain(StaticDomain):
 
             self.records['A'] = self.isp_a_record.get(key, [])
 
-        return super(ISPSmartDomain, self).query(qtype, query_args)
+        return super(ISPSmartDomain, self).query(query_args)
 
 dom = StaticDomain('cdn.ptsang.net')
 dom.add_record('SOA', 'ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300', ttl=3600)
@@ -109,6 +112,8 @@ dom = DynamicDomain('01.cdn.ptsang.net')
 dom.add_record('SOA', 'ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300', ttl=3600)
 dom.add_record('NS', 'ddns1.appgame.com.', ttl=3600)
 dom.add_record('NS', 'ddns2.appgame.com.', ttl=3600)
+dom.add_record('A', '1.2.4.8', ttl=300)
+dom.add_record('A', '210.2.4.8', ttl=300)
 dom.add_dyn_record('TXT', lambda args : [args.get('remote',''), 'Your Query IP is:'])
 DOMAIN[dom.qname] = dom
 
@@ -131,7 +136,7 @@ class MyHandler(pdns.remotebackend.Handler):
 
         if qname in DOMAIN:
             dom = DOMAIN[qname]
-            self.result = dom.query(qtype, args)
+            self.result = dom.query(args)
 
 pdns.remotebackend.PipeConnector(MyHandler, {"abi":'pipe', "ttl":0}).run()
 
