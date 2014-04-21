@@ -1,3 +1,3 @@
 [submodule "pdns-remotebackend-python"]
 	path = pdns-remotebackend-python
-	url = https://github.com/pentie/mini-smart-pdns.git
+	url = https://github.com/pentie/pdns-remotebackend-python.git
