@@ -2,6 +2,7 @@
 ## -*- coding: utf-8 -*-
 import sys
 import syslog
+import itertools
 from collections import defaultdict
 from pyip import IPInfo
 from os.path import realpath,dirname,join,exists
@@ -13,85 +14,123 @@ import pdns.remotebackend, pdns.remotebackend.unix
 
 QQWry_DB = join(dirname(realpath(__file__)), 'qqwry.dat')
 QQWry = IPInfo(QQWry_DB)
-
-DOMAIN = \
-    {
-        'cdn.ptsang.net': defaultdict(list),
-        '01.cdn.ptsang.net': defaultdict(list),
-    }
-
-rec = DOMAIN['cdn.ptsang.net']
-rec['SOA'].append('ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300')
-rec['NS'].append('ddns1.appgame.com.')
-rec['NS'].append('ddns2.appgame.com.')
-
-rec = DOMAIN['01.cdn.ptsang.net']
-rec['SOA'].append('ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300')
-rec['NS'].append('ddns1.appgame.com.')
-rec['NS'].append('ddns2.appgame.com.')
-rec['A'].append('8.8.8.8')
-rec['A'].append('8.8.4.4')
-rec['TXT'].append(lambda args: "!! REMOTE: {0}".format(args.get('remote', '')))
-rec['TXT'].append(lambda args:str(args))
-rec['TXT'].append('hahahah ........')
+DOMAIN = {}
 
 
-CDN_A_REC = \
-    {
-        '01.cdn.ptsang.net': defaultdict(list),
-    }
+class StaticDomain(object):
+
+    def __init__(self, qname, default_ttl=300, auth=1):
+        self.qname = qname
+        self.records = defaultdict(list)
+
+    def add_record(self, qtype, content, ttl=300, auth=1):
+        self.records[qtype].append({'qtype': qtype, 'qname': self.qname, 'content': content, 'ttl': ttl, 'auth': auth})
+
+    def query(self, qtype, query_args = None):
+        if qtype == 'ANY':
+            return list(itertools.chain.from_iterable(self.records.values()))
+        else:
+            return self.records.get(qtype, list())
 
 
-a_rec = CDN_A_REC['01.cdn.ptsang.net']
-a_rec[u'电信'] = ('1.2.3.1', '1.2.3.2', '1.2.3.3', '1.2.3.4')
-a_rec[u'联通'] = ('2.2.3.1', '2.2.3.2', '2.2.3.3', '2.2.3.4')
-a_rec[u'移动'] = ('3.2.3.1', '3.2.3.2', '3.2.3.3', '3.2.3.4')
+class DynamicDomain(StaticDomain):
 
+    def __init__(self, *args, **argkw):
+        super(DynamicDomain, self).__init__(*args, **argkw)
+        self.dyn_methods = {}
 
+    def add_dyn_record(self, qtype, dyn_content):
+        if not callable(dyn_content):
+            raise Exception('dyn_content need to be callable')
+        self.dyn_methods[qtype] = dyn_content
 
-def qqwry_ip_select(remoteip, isps):
-    key = u'电信' #default
-    c, a = QQWry.getIPAddr(remoteip)
+    def query(self, qtype, query_args):
+        for qtype, dyn_content in self.dyn_methods.items():
+            self.records[qtype] = \
+                    [{'qtype': qtype, 'qname': self.qname, 
+                        'content': value, 'ttl':0, 'auth':1} for value in dyn_content(query_args)]
+        return super(DynamicDomain, self).query(qtype, query_args)
 
-    syslog.syslog("IP %s get wry %s" % (remoteip, a.encode('utf-8')))
+class ISPSmartDomain(StaticDomain):
 
-    for i in isps:
-        if a.find(i) != -1:
-            key = i
-            break
+    def __init__(self, *args, **argkw):
+        super(ISPSmartDomain, self).__init__(*args, **argkw)
+        self.isp_a_record = defaultdict(list)
+        self.default_isp = ''
+        self.isp_keys = None
 
-    syslog.syslog("return: %s" % key.encode('utf-8'))
+    def set_default_isp(self, default_isp):
+        self.default_isp = default_isp
 
-    return key
+    def add_isp_a_record(self, isp, ip):
+        if isinstance(ip, list) or isinstance(ip, tuple):
+            self.isp_a_record[isp].extend([ \
+                {'qtype': 'A', 'qname': self.qname, 'content': cnt, 'ttl': 0, 'auth': 1} for cnt in ip ])
+        else:
+            self.isp_a_record[isp].append({'qtype': 'A', 'qname': self.qname, 'content': ip, 'ttl': 0, 'auth': 1})
+
+    def query(self, qtype, query_args):
+
+        remote = query_args['remote']
+
+        if self.isp_keys is None:
+            self.isp_keys = self.isp_a_record.keys()
+
+        location, isp = QQWry.getIPAddr(remote)
+
+        syslog.syslog("IP {0} get wry {1}-{2}".format(remote, location.encode('utf-8'), isp.encode('utf-8')))
+
+        for key in self.isp_keys:
+            if isp.find(key) != -1:
+                break
+        else:
+            if self.default_isp == '':
+                key = self.isp_keys[0]
+            else:
+                key = self.default_isp
+
+        self.records['A'] = self.isp_a_record.get(key, self.isp_a_record[self.isp_keys[0]])
+        return super(ISPSmartDomain, self).query(qtype, query_args)
+
+dom = StaticDomain('cdn.ptsang.net')
+dom.add_record('SOA', 'ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300', ttl=3600)
+dom.add_record('NS', 'ddns1.appgame.com.', ttl=3600)
+dom.add_record('NS', 'ddns2.appgame.com.', ttl=3600)
+DOMAIN[dom.qname] = dom
+
+dom = StaticDomain('cdn2.ptsang.net')
+dom.add_record('SOA', 'ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300', ttl=3600)
+dom.add_record('NS', 'ddns1.appgame.com.', ttl=3600)
+dom.add_record('NS', 'ddns2.appgame.com.', ttl=3600)
+DOMAIN[dom.qname] = dom
+
+dom = DynamicDomain('01.cdn.ptsang.net')
+dom.add_record('SOA', 'ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300', ttl=3600)
+dom.add_record('NS', 'ddns1.appgame.com.', ttl=3600)
+dom.add_record('NS', 'ddns2.appgame.com.', ttl=3600)
+dom.add_dyn_record('TXT', lambda args : [args.get('remote',''), 'Your Query IP is:'])
+DOMAIN[dom.qname] = dom
+
+dom = ISPSmartDomain('02.cdn.ptsang.net')
+dom.add_record('SOA', 'ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300', ttl=3600)
+dom.add_record('NS', 'ddns1.appgame.com.', ttl=3600)
+dom.add_record('NS', 'ddns2.appgame.com.', ttl=3600)
+dom.add_isp_a_record(u"电信", ('1.2.3.1', '1.2.3.2', '1.2.3.3', '1.2.3.4'))
+dom.add_isp_a_record(u"联通", ('2.2.3.1', '2.2.3.2', '2.2.3.3', '2.2.3.4'))
+dom.add_isp_a_record(u"移动", ('3.2.3.1', '3.2.3.2', '3.2.3.3', '3.2.3.4'))
+dom.set_default_isp(u"电信")
+DOMAIN[dom.qname] = dom
 
 class MyHandler(pdns.remotebackend.Handler):
 
     def do_lookup(self,args):
-        #syslog.syslog(str(args))
-
         self.result = []
-
         qname = args['qname']
         qtype = args['qtype']
-        remote = args['remote']
 
         if qname in DOMAIN:
-            rec = DOMAIN[qname]
-
-            if qname in CDN_A_REC and qtype in ('A', 'ANY'):
-                a_rec = CDN_A_REC[qname]
-                key = qqwry_ip_select(remote, a_rec.keys())
-                rec['A'] = a_rec[key]
-
-            if qtype in rec:
-                rval = rec.get(qtype)
-                for val in [ v(args) if callable(v) else v for v in rval]:
-                    self.result.append(self.record(qname, qtype, val))
-
-            elif qtype == 'ANY':
-                for rtype, rval in rec.items():
-                    for val in [ v(args) if callable(v) else v for v in rval]:
-                        self.result.append(self.record(qname, rtype, val))
+            dom = DOMAIN[qname]
+            self.result = dom.query(qtype, args)
 
 pdns.remotebackend.PipeConnector(MyHandler, {"abi":'pipe', "ttl":0}).run()
 
