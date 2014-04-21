@@ -1,0 +1,14 @@
+HELO	1
+Q	cdn.ptsang.net	IN	SOA	-1	203.0.113.210
+Q	cdn.ptsang.net	IN	NS	-1	203.0.113.210
+Q	cdn.ptsang.net	IN	ANY	-1	203.0.113.210
+Q	cdn2.ptsang.net	IN	ANY	-1	203.0.113.210
+Q	cdn.ptsang.net	IN	MX	-1	203.0.113.210
+Q	01.cdn.ptsang.net	IN	TXT	-1	203.0.113.210
+Q	01.cdn.ptsang.net	IN	ANY	-1	203.0.113.210
+Q	02.cdn.ptsang.net	IN	ANY	-1	203.0.113.210
+Q	02.cdn.ptsang.net	IN	A	-1	218.204.59.43
+Q	02.cdn.ptsang.net	IN	A	-1	61.48.12.1
+Q	02.cdn.ptsang.net	IN	A	-1	171.104.211.233
+Q	02.cdn.ptsang.net	IN	A	-1	124.40.128.191
+
