@@ -16,7 +16,6 @@ QQWry_DB = join(dirname(realpath(__file__)), 'qqwry.dat')
 QQWry = IPInfo(QQWry_DB)
 DOMAIN = {}
 
-
 class StaticDomain(object):
 
     def __init__(self, qname, default_ttl=300, auth=1):
@@ -71,25 +70,27 @@ class ISPSmartDomain(StaticDomain):
 
     def query(self, qtype, query_args):
 
-        remote = query_args['remote']
+        if qtype in ('ANY', 'A'):
+            remote = query_args['remote']
 
-        if self.isp_keys is None:
-            self.isp_keys = self.isp_a_record.keys()
+            if self.isp_keys is None:
+                self.isp_keys = self.isp_a_record.keys()
 
-        location, isp = QQWry.getIPAddr(remote)
+            location, isp = QQWry.getIPAddr(remote)
 
-        syslog.syslog("IP {0} get wry {1}-{2}".format(remote, location.encode('utf-8'), isp.encode('utf-8')))
+            syslog.syslog("IP {0} QQWry: {1}-{2}".format(remote, location.encode('utf-8'), isp.encode('utf-8')))
 
-        for key in self.isp_keys:
-            if isp.find(key) != -1:
-                break
-        else:
-            if self.default_isp == '':
-                key = self.isp_keys[0]
+            for key in self.isp_keys:
+                if isp.find(key) != -1:
+                    break
             else:
-                key = self.default_isp
+                if self.default_isp == '':
+                    key = self.isp_keys[0]
+                else:
+                    key = self.default_isp
 
-        self.records['A'] = self.isp_a_record.get(key, self.isp_a_record[self.isp_keys[0]])
+            self.records['A'] = self.isp_a_record.get(key, [])
+
         return super(ISPSmartDomain, self).query(qtype, query_args)
 
 dom = StaticDomain('cdn.ptsang.net')
