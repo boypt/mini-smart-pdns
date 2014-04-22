@@ -1,6 +1,8 @@
+#!/usr/bin/python3
 import syslog
 import itertools
 from collections import defaultdict
+import collections
 
 class StaticDomain(object):
 
@@ -14,7 +16,7 @@ class StaticDomain(object):
     def query(self, query_args):
         qtype = query_args['qtype']
         if qtype == 'ANY':
-            return list(itertools.chain.from_iterable(self.records.values()))
+            return itertools.chain.from_iterable(self.records.values())
         else:
             return self.records.get(qtype, list())
 
@@ -26,7 +28,7 @@ class DynamicDomain(StaticDomain):
         self.dyn_methods = {}
 
     def add_dyn_record(self, qtype, dyn_content):
-        if not callable(dyn_content):
+        if not isinstance(dyn_content, collections.Callable):
             raise Exception('dyn_content need to be callable')
         self.dyn_methods[qtype] = dyn_content
 
@@ -68,7 +70,7 @@ class ISPSmartDomain(StaticDomain):
             remote = query_args['remote']
 
             if self.isp_keys is None:
-                self.isp_keys = self.isp_a_record.keys()
+                self.isp_keys = list(self.isp_a_record.keys())
 
             location, isp = self.QQWry.getIPAddr(remote)
 
@@ -82,7 +84,7 @@ class ISPSmartDomain(StaticDomain):
                 else:
                     key = self.default_isp
 
-            syslog.syslog(u"IP {0} QQWry: {1}-{2}, select {3}".format(remote, location, isp, key).encode('utf-8'))
+            syslog.syslog("IP {0} QQWry: {1}-{2}, select {3}".format(remote, location, isp, key))
             self.records['A'] = self.isp_a_record.get(key, [])
 
         return super(ISPSmartDomain, self).query(query_args)

@@ -1,4 +1,4 @@
-#!/usr/bin/python2 -u
+#!/usr/bin/python3 -u
 ## -*- coding: utf-8 -*-
 import sys
 from os.path import realpath,dirname,join,exists
@@ -37,10 +37,10 @@ dom = ISPSmartDomain('02.cdn.ptsang.net')
 dom.add_record('SOA', 'ddns1.appgame.com. wemaster@appgame.com. 2014040985 14400 14400 1209600 300', ttl=3600)
 dom.add_record('NS', 'ddns1.appgame.com.', ttl=3600)
 dom.add_record('NS', 'ddns2.appgame.com.', ttl=3600)
-dom.add_isp_a_record(u"电信", ('1.2.3.1', '1.2.3.2', '1.2.3.3', '1.2.3.4'))
-dom.add_isp_a_record(u"联通", ('2.2.3.1', '2.2.3.2', '2.2.3.3', '2.2.3.4'))
-dom.add_isp_a_record(u"移动", ('3.2.3.1', '3.2.3.2', '3.2.3.3', '3.2.3.4'))
-dom.set_default_isp(u"电信")
+dom.add_isp_a_record("电信", ('1.2.3.1', '1.2.3.2', '1.2.3.3', '1.2.3.4'))
+dom.add_isp_a_record("联通", ('2.2.3.1', '2.2.3.2', '2.2.3.3', '2.2.3.4'))
+dom.add_isp_a_record("移动", ('3.2.3.1', '3.2.3.2', '3.2.3.3', '3.2.3.4'))
+dom.set_default_isp("电信")
 DOMAIN[dom.qname] = dom
 
 class MyHandler(pdns.remotebackend.Handler):

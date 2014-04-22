@@ -63,13 +63,13 @@ class IPInfo(object):
         (self.firstIndex, self.lastIndex) = unpack_from('<II', self.img)
  
         # 每条索引长7字节，这里得到索引总个数
-        self.indexCount = (self.lastIndex - self.firstIndex) / 7 + 1
+        self.indexCount = int((self.lastIndex - self.firstIndex) / 7) + 1
      
-    def getLong3(self, offset = 0):
-        '''QQWry.Dat中的偏移记录都是3字节，本函数取得3字节的偏移量的常规表示
-        QQWry.Dat使用“字符串“存储这些值'''
-        # offset+3 may not exists so we move back 1 byte
-        return (unpack_from('<I', self.img, offset-1)[0] & 0xffffffff) >> 8
+    index2ip = lambda self,index : unpack_from('<I', self.img, self.firstIndex + index * 7)[0]
+
+    #'''QQWry.Dat中的偏移记录都是3字节，本函数取得3字节的偏移量的常规表示 QQWry.Dat使用“字符串“存储这些值'''
+    # little-endian integer
+    byte3offset = lambda self,offset : (unpack_from('<I', self.img, offset-1)[0] & 0xffffff00) >> 8
  
     def getAddr(self, offset, addr_count=2):
         ''' read address from offset, addr_count indicate how many addresses(string/pointer to string) 
@@ -79,36 +79,38 @@ class IPInfo(object):
         addrs = []
         while i < addr_count:
             i += 1
-            byte = ord(self.img[offset])
+            byte = self.img[offset]
+
             if byte == 1:
                 # 重定向模式1
                 # [IP][0x01][国家和地区信息的绝对偏移地址]
                 # 使用接下来的3字节作为偏移量调用字节取得信息
-                addrs += self.getAddr(self.getLong3(offset + 1), 2)
+                addrs += self.getAddr(self.byte3offset(offset + 1), 2)
                 i += 1  # skip 1 address as we got 2 at a time
                 offset += 4     # move to next address(if exists)
             elif byte == 2:
                 # 重定向模式2
                 # [IP][0x02][国家/地区信息的绝对偏移]
                 # 使用国家/地区信息偏移量调用自己取得字符串信息
-                addrs += self.getAddr(self.getLong3(offset + 1), 1)
+                addrs += self.getAddr(self.byte3offset(offset + 1), 1)
                 offset += 4     # move to next address(if exists)
             else:
-                offset2 = self.img.find('\0', offset)
+                offset2 = self.img.find(0, offset)
                 gb2312_str = self.img[offset:offset2]
                 try:
                     uni_str = gb2312_str.decode('gb2312')
                 except:
-                    uni_str = u'错误'
+                    uni_str = '错误'
                 addrs.append(uni_str)
                 offset = offset2 + 1
+
         return addrs
                  
                  
     def getAddrSafe(self, offset, addr_count=2):
         ''' read address from offset, addr_count indicate how many addresses(string/pointer to string) 
         should be return, add excption handleing '''
-        err = (u'错误', u'错误')
+        err = ('错误', '错误')
         try:
             retval = tuple(self.getAddr(offset, addr_count))
             if len(retval) != 2:
@@ -123,14 +125,10 @@ class IPInfo(object):
         if r - l <= 1:
             return l
  
-        m = (l + r) / 2
-        o = self.firstIndex + m * 7
-        new_ip = unpack_from('<I', self.img, o)[0]
- 
-        if ip < new_ip:
-            return self.find(ip, l, m)
-        else:
-            return self.find(ip, m, r)
+        m = int((l + r) / 2)
+        mid_ip = self.index2ip(m)
+        return self.find(ip, l, m) if ip < mid_ip else self.find(ip, m, r)
+
          
     def getIPAddr(self, ip):
         ''' 调用其他函数，取得信息！'''
@@ -139,38 +137,39 @@ class IPInfo(object):
         # 使用 self.find 函数查找ip的索引偏移
         i = self.find(ip, 0, self.indexCount - 1)
         # 得到索引记录
-        o = self.firstIndex + i * 7
         # 索引记录格式是： 前4字节IP信息+3字节指向IP记录信息的偏移量
+        o = self.firstIndex + i * 7
+        ip2 = self.index2ip(i)
+
         # check if ip is in range
-        ip2 = unpack_from('<I', self.img, o)
-        if ip > ip2:    # out of range
-            return (u'未知', u'未知')
-        else:
+        if ip >= ip2:
             # 这里就是使用后3字节作为偏移量得到其常规表示（QQWry.Dat用字符串表示值）
-            o2 = self.getLong3(o + 4)
+            o2 = self.byte3offset(o + 4)
             # IP记录偏移值+4可以丢弃前4字节的IP地址信息。
             #(c, a) = self.getAddr(o2 + 4)
             (c, a) = self.getAddrSafe(o2 + 4)
             return (c, a)
+        else:
+            return ('未知', '未知')
          
-    def output(self, first, last):
+    def output_all_record(self, first, last):
         for i in range(first, last):
             o = self.firstIndex +  i * 7
             ip = socket.inet_ntoa(pack('!I', unpack_from('<I', self.img, o)[0]))
-            offset = self.getLong3(o + 4)
+            offset = self.byte3offset(o + 4)
             (c, a) = self.getAddrSafe(offset + 4)
-            print "%s %d %s/%s" % (ip, offset, c, a)
+            yield (ip, offset, c, a)
  
  
 def main():
     i = IPInfo('qqwry.dat')
 
     if len(sys.argv) < 2:
-        print "Usage: %s ip_addr" % sys.argv[0]
+        print("Usage: %s ip_addr" % sys.argv[0])
         sys.exit()
     (c, a) = i.getIPAddr(sys.argv[1])
  
-    print '%s %s/%s' % (sys.argv[1], c, a)
+    print('%s %s/%s' % (sys.argv[1], c, a))
  
 if __name__ == '__main__':
     main()
