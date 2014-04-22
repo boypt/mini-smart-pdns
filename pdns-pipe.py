@@ -1,5 +1,4 @@
 #!/usr/bin/python3 -u
-## -*- coding: utf-8 -*-
 import sys
 from os.path import realpath,dirname,join,exists
 
@@ -45,6 +44,8 @@ class MyHandler(pdns.remotebackend.Handler):
         dom.add_isp_a_record("移动", ('3.2.3.1', '3.2.3.2', '3.2.3.3', '3.2.3.4'))
         dom.set_default_isp("电信")
         DOMAIN[dom.qname] = dom
+
+        return super(MyHandler, self).do_initialize(*args)
 
     def do_lookup(self,args):
 
