@@ -72,7 +72,6 @@ class ISPSmartDomain(StaticDomain):
 
             location, isp = self.QQWry.getIPAddr(remote)
 
-            syslog.syslog("IP {0} QQWry: {1}-{2}".format(remote, location.encode('utf-8'), isp.encode('utf-8')))
 
             for key in self.isp_keys:
                 if isp.find(key) != -1:
@@ -83,6 +82,7 @@ class ISPSmartDomain(StaticDomain):
                 else:
                     key = self.default_isp
 
+            syslog.syslog(u"IP {0} QQWry: {1}-{2}, select {3}".format(remote, location, isp, key).encode('utf-8'))
             self.records['A'] = self.isp_a_record.get(key, [])
 
         return super(ISPSmartDomain, self).query(query_args)
