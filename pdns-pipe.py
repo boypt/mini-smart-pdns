@@ -49,7 +49,7 @@ class MyHandler(pdns.remotebackend.Handler):
 
     def do_lookup(self,args):
 
-        self.result = []
+        self.result = False
         qname = args['qname']
 
         if qname in self.DOMAIN:
